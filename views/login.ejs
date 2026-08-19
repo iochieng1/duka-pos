@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — Duka POS</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body class="login-body">
+
+<!-- ── Left brand panel ─────────────────────────────── -->
+<div class="left">
+  <div class="left-logo">Duka<span>POS</span></div>
+  <div class="left-content">
+    <div class="left-tag"><span class="dot"></span>Shop Management</div>
+    <h1>Your shop,<br>under <em>full</em><br>control.</h1>
+    <p>Track every sale, monitor stock, and run daily reports — all from one simple dashboard.</p>
+    <div class="left-stats">
+      <div><div class="stat-num">200+</div><div class="stat-label">Shops</div></div>
+      <div><div class="stat-num">KSh 0</div><div class="stat-label">Monthly cost</div></div>
+      <div><div class="stat-num">4.9★</div><div class="stat-label">Rating</div></div>
+    </div>
+  </div>
+  <div class="left-card">
+    <div class="left-card-row"><div class="lc-dot" style="background:#0EAF72"></div><span class="lc-label">Revenue today</span><span class="lc-val">KSh 4,320</span></div>
+    <div class="left-card-row"><div class="lc-dot" style="background:#F5A623"></div><span class="lc-label">Low stock</span><span class="lc-val">2 items</span></div>
+    <div class="left-card-row"><div class="lc-dot" style="background:#3B82F6"></div><span class="lc-label">Sales today</span><span class="lc-val">17 sales</span></div>
+  </div>
+  <p style="font-size:11px;color:rgba(255,255,255,.2);position:relative;z-index:1">© 2026 Duka POS · Built for Kenya</p>
+</div>
+
+<!-- ── Right login panel ────────────────────────────── -->
+<div class="right">
+  <div class="login-box">
+    <div class="login-header">
+      <h2><%= t('welcome_back') %></h2>
+      <p><%= t('sign_in_sub') %></p>
+    </div>
+
+    <!-- Role selector (visual only — role is determined by DB) -->
+    <div class="role-selector">
+      <button type="button" class="role-btn <%= prefillRole==='owner'   ?'active':'' %>" onclick="selectRole('owner',this)">
+        <div class="role-icon">👑</div>
+        <span class="role-name"><%= t('owner') %></span>
+        <span class="role-desc"><%= t('full_access') %></span>
+      </button>
+      <button type="button" class="role-btn <%= prefillRole==='cashier' ?'active':'' %>" onclick="selectRole('cashier',this)">
+        <div class="role-icon">🛒</div>
+        <span class="role-name"><%= t('cashier') %></span>
+        <span class="role-desc"><%= t('pos_checkout') %></span>
+      </button>
+    </div>
+
+    <% if (error) { %>
+      <div class="error-msg show"><span>⚠</span><span><%= error %></span></div>
+    <% } %>
+
+    <!-- Real form — POSTs to /login, no JS interception -->
+    <form method="POST" action="/login" id="login-form" novalidate>
+      <input type="hidden" name="role" id="role-input" value="<%= prefillRole %>">
+
+      <div class="form-group">
+        <label class="form-label" for="login-name"><%= t('name') %></label>
+        <input class="form-input" type="text" id="login-name" name="name"
+          placeholder="e.g. owner" value="<%= prefillName %>"
+          autocomplete="username" autofocus spellcheck="false" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="login-pin"><%= t('pin') %></label>
+        <div class="pin-wrap">
+          <input class="form-input pin-input" type="password" id="login-pin" name="pin"
+            placeholder="••••" maxlength="8" inputmode="numeric"
+            autocomplete="current-password" required>
+          <button type="button" class="pin-toggle" id="pin-eye" onclick="togglePIN()">👁</button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-submit" id="submit-btn">
+        <span class="btn-text"><%= t('sign_in') %></span>
+        <div class="spinner"></div>
+      </button>
+    </form>
+
+    <div class="divider"><%= t('default_logins') %></div>
+
+    <div class="hint-box">
+      <strong>Shop 1 — Mama Mboga (Kawangware)</strong>
+      <div class="hint-row"><span>👑 Owner</span>  <span><code>owner</code> / <code>1234</code></span></div>
+      <div class="hint-row"><span>🛒 Cashier</span><span><code>cashier</code> / <code>0000</code></span></div>
+      <strong style="display:block;margin-top:10px">Shop 2 — Duka Mzuri (Eastleigh)</strong>
+      <div class="hint-row"><span>👑 Owner</span>  <span><code>owner2</code> / <code>1234</code></span></div>
+      <div class="hint-row"><span>🛒 Cashier</span><span><code>cashier2</code> / <code>0000</code></span></div>
+    </div>
+
+    <p class="login-footer"><%= t('no_account') %></p>
+  </div>
+</div>
+
+<script>
+  function selectRole(role, el) {
+    document.getElementById('role-input').value = role;
+    document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+  }
+  function togglePIN() {
+    const pin = document.getElementById('login-pin');
+    const eye = document.getElementById('pin-eye');
+    const isHidden = pin.type === 'password';
+    pin.type = isHidden ? 'text' : 'password';
+    eye.textContent = isHidden ? '🙈' : '👁';
+  }
+  // Digits only in PIN field
+  document.getElementById('login-pin').addEventListener('input', function() {
+    this.value = this.value.replace(/\D/g, '');
+  });
+  // Show spinner on real form submit
+  document.getElementById('login-form').addEventListener('submit', function() {
+    document.getElementById('submit-btn').classList.add('loading');
+  });
+</script>
+</body>
+</html>
