@@ -1,0 +1,8 @@
+node_modules/
+duka.db
+duka.db-journal
+duka.db-shm
+duka.db-wal
+.env
+.DS_Store
+npm-debug.log*
