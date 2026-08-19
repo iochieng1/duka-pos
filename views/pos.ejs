@@ -1,0 +1,392 @@
+<%- include('partials/head', { title: t('point_of_sale') }) %>
+<%- include('partials/nav', { active: 'pos' }) %>
+
+<!-- Print-only: hide everything except receipt -->
+<style>
+  @media print {
+    body > *:not(#print-receipt) { display: none !important; }
+    #print-receipt {
+      display: block !important;
+      position: fixed; inset: 0;
+      padding: 32px; font-family: monospace; font-size: 13px; background: #fff;
+    }
+  }
+</style>
+
+<!-- Hidden print receipt (populated after checkout) -->
+<div id="print-receipt" style="display:none">
+  <div style="text-align:center;margin-bottom:12px">
+    <div style="font-size:20px;font-weight:900;letter-spacing:-1px">DUKA POS</div>
+    <div id="pr-shop" style="font-size:12px;color:#555"></div>
+    <div id="pr-time" style="font-size:11px;color:#888;margin-top:4px"></div>
+  </div>
+  <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:10px 0;margin-bottom:10px">
+    <div id="pr-items"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-weight:900;font-size:15px">
+    <span><%= t('total') %></span><span id="pr-total"></span>
+  </div>
+  <div style="text-align:center;margin-top:16px;font-size:11px;color:#888">
+    <p><%= t('receipt_thanks') %></p>
+  </div>
+</div>
+
+<main class="container">
+  <div class="page-header">
+    <div>
+      <h2><%= t('point_of_sale') %></h2>
+      <p class="shop-label">🏪 <%= shop.name %></p>
+    </div>
+    <button class="btn btn-outline" id="scan-btn">📷 <%= t('scan_barcode') %></button>
+  </div>
+
+  <!-- Scanner panel (hidden until opened) -->
+  <div class="card scanner-panel" id="scanner-panel" hidden>
+    <div class="card-header">
+      <h3>📷 <%= t('scan_barcode') %></h3>
+      <button class="btn btn-outline btn-sm" id="scan-close"><%= t('close_scanner') %></button>
+    </div>
+    <div id="scanner-viewport" style="text-align:center;min-height:80px"></div>
+    <p class="scanner-status" id="scanner-status">Point camera at a barcode…</p>
+  </div>
+
+  <!-- Category filter tabs -->
+  <% if (categories.length > 1) { %>
+  <div class="category-tabs" id="cat-tabs">
+    <button class="cat-tab active" data-cat="all"><%= t('category_all') %></button>
+    <% categories.forEach(cat => { %>
+      <button class="cat-tab" data-cat="<%= cat %>"><%= cat %></button>
+    <% }) %>
+  </div>
+  <% } %>
+
+  <div class="pos-layout">
+    <!-- Product grid -->
+    <div class="product-grid" id="product-grid">
+      <% products.forEach(p => { %>
+        <% const status = p.stock === 0 ? 'out' : p.stock <= p.low_stock_threshold ? 'low' : 'ok'; %>
+        <button
+          class="product-btn <%= status==='low'?'product-btn--low':'' %>"
+          data-id="<%= p.id %>"
+          data-name="<%= p.name %>"
+          data-price="<%= p.price %>"
+          data-stock="<%= p.stock %>"
+          data-barcode="<%= p.barcode || '' %>"
+          data-category="<%= p.category %>"
+          <%= status==='out' ? 'disabled' : '' %>
+        >
+          <% if (p.category && p.category !== 'General') { %>
+          <span class="product-cat-badge"><%= p.category %></span>
+          <% } %>
+          <span class="product-name"><%= p.name %></span>
+          <span class="product-stock">
+            <%= status==='out' ? t('out_of_stock') : `${p.stock} ${t('left')}` %>
+          </span>
+          <span class="product-price">KSh <%= p.price.toFixed(0) %></span>
+        </button>
+      <% }) %>
+    </div>
+
+    <!-- Cart panel -->
+    <div class="cart-panel">
+      <h3><%= t('cart') %></h3>
+      <div id="cart-items">
+        <p class="empty-state"><%= t('tap_to_add') %></p>
+      </div>
+      <div class="cart-footer">
+        <div class="cart-total"><%= t('total') %>: <strong id="cart-total">KSh 0</strong></div>
+        <button class="btn btn-primary btn-full" id="checkout-btn" disabled>
+          <%= t('checkout') %>
+        </button>
+        <button class="btn btn-outline btn-full" id="clear-btn"><%= t('clear_cart') %></button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Receipt modal -->
+<div class="modal" id="receipt-modal" hidden>
+  <div class="modal-box">
+    <div class="receipt-box" id="receipt-content">
+      <div class="receipt-header">
+        <div class="receipt-logo">Duka POS</div>
+        <div class="receipt-shopname" id="rm-shop"><%= shop.name %></div>
+        <div class="receipt-time" id="rm-time"></div>
+      </div>
+      <div id="rm-items"></div>
+      <div class="receipt-total-line">
+        <span><%= t('total') %></span><strong id="rm-total"></strong>
+      </div>
+      <p class="receipt-thanks"><%= t('receipt_thanks') %></p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-full" id="btn-print">🖨 <%= t('print_receipt') %></button>
+      <button class="btn btn-primary btn-full" id="btn-new-sale"><%= t('new_sale_btn') %></button>
+    </div>
+  </div>
+</div>
+
+<!-- ZXing for barcode scanning -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+
+<script>
+/* Translated strings for JS (server-rendered so no fetch needed) */
+const TR = {
+  notEnoughStock: <%- JSON.stringify(t('not_enough_stock')) %>,
+  checkoutFailed: <%- JSON.stringify(t('checkout_failed')) %>,
+  processing:     <%- JSON.stringify(t('processing')) %>,
+  checkoutLabel:  <%- JSON.stringify(t('checkout')) %>,
+  tapToAdd:       <%- JSON.stringify(t('tap_to_add')) %>,
+};
+
+(function() {
+  // ── State ────────────────────────────────────────────────────
+  let cart = []; // { id, name, price, qty }
+
+  // ── Elements ─────────────────────────────────────────────────
+  const productBtns   = Array.from(document.querySelectorAll('.product-btn'));
+  const cartItemsEl   = document.getElementById('cart-items');
+  const cartTotalEl   = document.getElementById('cart-total');
+  const checkoutBtn   = document.getElementById('checkout-btn');
+  const clearBtn      = document.getElementById('clear-btn');
+  const receiptModal  = document.getElementById('receipt-modal');
+
+  // ── Cart logic ────────────────────────────────────────────────
+  function addToCart(id, name, price, stock) {
+    const existing = cart.find(x => x.id === id);
+    if (existing) {
+      if (existing.qty >= stock) { showToast(TR.notEnoughStock, 'warn'); return false; }
+      existing.qty++;
+    } else {
+      if (stock < 1) { showToast(TR.notEnoughStock, 'warn'); return false; }
+      cart.push({ id, name, price, qty: 1 });
+    }
+    renderCart();
+    return true;
+  }
+
+  function renderCart() {
+    if (!cart.length) {
+      cartItemsEl.innerHTML = `<p class="empty-state">${TR.tapToAdd}</p>`;
+      cartTotalEl.textContent = 'KSh 0';
+      checkoutBtn.disabled = true;
+      return;
+    }
+
+    cartItemsEl.innerHTML = cart.map(item => `
+      <div class="cart-row">
+        <div>
+          <div style="font-weight:600">${item.name}</div>
+          <div class="cart-row-meta">KSh ${item.price.toFixed(0)} × ${item.qty}</div>
+        </div>
+        <div class="cart-row-right">
+          <span class="cart-row-total">KSh ${(item.price * item.qty).toFixed(0)}</span>
+          <div class="qty-controls">
+            <button class="qty-btn" data-action="dec" data-id="${item.id}">−</button>
+            <span class="qty-num">${item.qty}</span>
+            <button class="qty-btn" data-action="inc" data-id="${item.id}" data-stock="${getStock(item.id)}">+</button>
+          </div>
+          <button class="cart-row-remove" data-id="${item.id}">✕</button>
+        </div>
+      </div>`).join('');
+
+    // Wire quantity controls and remove buttons
+    cartItemsEl.querySelectorAll('.qty-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        const id  = parseInt(b.dataset.id);
+        const act = b.dataset.action;
+        const item = cart.find(x => x.id === id);
+        if (!item) return;
+        if (act === 'dec') {
+          if (item.qty <= 1) { cart = cart.filter(x => x.id !== id); }
+          else item.qty--;
+        } else {
+          const stock = parseInt(b.dataset.stock);
+          if (item.qty >= stock) { showToast(TR.notEnoughStock, 'warn'); return; }
+          item.qty++;
+        }
+        renderCart();
+      });
+    });
+    cartItemsEl.querySelectorAll('.cart-row-remove').forEach(b => {
+      b.addEventListener('click', () => {
+        cart = cart.filter(x => x.id !== parseInt(b.dataset.id));
+        renderCart();
+      });
+    });
+
+    const total = cart.reduce((s, x) => s + x.price * x.qty, 0);
+    cartTotalEl.textContent = `KSh ${total.toFixed(0)}`;
+    checkoutBtn.disabled = false;
+  }
+
+  function getStock(id) {
+    const btn = productBtns.find(b => parseInt(b.dataset.id) === id);
+    return btn ? parseInt(btn.dataset.stock) : 999;
+  }
+
+  // ── Product button clicks ─────────────────────────────────────
+  productBtns.forEach(btn => {
+    btn.addEventListener('click', () => addToCart(
+      parseInt(btn.dataset.id),
+      btn.dataset.name,
+      parseFloat(btn.dataset.price),
+      parseInt(btn.dataset.stock)
+    ));
+  });
+
+  clearBtn.addEventListener('click', () => { cart = []; renderCart(); });
+
+  // ── Category filter tabs ──────────────────────────────────────
+  document.querySelectorAll('.cat-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const cat = tab.dataset.cat;
+      productBtns.forEach(btn => {
+        const show = cat === 'all' || btn.dataset.category === cat;
+        btn.style.display = show ? '' : 'none';
+      });
+    });
+  });
+
+  // ── Checkout ──────────────────────────────────────────────────
+  checkoutBtn.addEventListener('click', async () => {
+    checkoutBtn.disabled = true;
+    checkoutBtn.textContent = TR.processing;
+
+    try {
+      const res  = await fetch('/pos/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cart),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast((data.error || TR.checkoutFailed), 'error');
+        checkoutBtn.disabled = false;
+        checkoutBtn.textContent = TR.checkoutLabel;
+        return;
+      }
+
+      populateReceipt(data.total);
+      receiptModal.hidden = false;
+      cart = [];
+      renderCart();
+    } catch (e) {
+      showToast(TR.checkoutFailed, 'error');
+      checkoutBtn.disabled = false;
+      checkoutBtn.textContent = TR.checkoutLabel;
+    }
+  });
+
+  // ── Receipt ───────────────────────────────────────────────────
+  function populateReceipt(total) {
+    const now = new Date();
+    document.getElementById('rm-time').textContent = now.toLocaleString();
+    document.getElementById('rm-items').innerHTML  = cart.map(item =>
+      `<div class="receipt-item-row">
+         <span>${item.name} ×${item.qty}</span>
+         <span>KSh ${(item.price * item.qty).toFixed(0)}</span>
+       </div>`
+    ).join('');
+    document.getElementById('rm-total').textContent = `KSh ${total.toFixed(0)}`;
+
+    // Populate hidden print area
+    document.getElementById('pr-shop').textContent  = document.getElementById('rm-shop').textContent;
+    document.getElementById('pr-time').textContent  = now.toLocaleString();
+    document.getElementById('pr-items').innerHTML   = document.getElementById('rm-items').innerHTML;
+    document.getElementById('pr-total').textContent = `KSh ${total.toFixed(0)}`;
+  }
+
+  document.getElementById('btn-print').addEventListener('click', () => {
+    document.getElementById('print-receipt').style.display = 'block';
+    window.print();
+    document.getElementById('print-receipt').style.display = 'none';
+  });
+
+  document.getElementById('btn-new-sale').addEventListener('click', () => {
+    receiptModal.hidden = true;
+    checkoutBtn.textContent = TR.checkoutLabel;
+    window.location.reload();
+  });
+
+  // ── Barcode scanner (ZXing) ───────────────────────────────────
+  const scanBtn     = document.getElementById('scan-btn');
+  const scanClose   = document.getElementById('scan-close');
+  const scanPanel   = document.getElementById('scanner-panel');
+  const scanStatus  = document.getElementById('scanner-status');
+  let codeReader = null, scanning = false;
+
+  scanBtn.addEventListener('click', async () => {
+    scanPanel.hidden = false;
+    scanPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (scanning) return;
+    scanning = true;
+    scanStatus.textContent = 'Starting camera…';
+
+    try {
+      codeReader = new ZXing.BrowserMultiFormatReader();
+      const video = Object.assign(document.createElement('video'), {
+        style: 'width:100%;max-width:420px;border-radius:8px',
+      });
+      document.getElementById('scanner-viewport').replaceChildren(video);
+
+      codeReader.decodeFromVideoDevice(undefined, video, async (result) => {
+        if (!result) return;
+        const code = result.getText();
+        scanStatus.textContent = `Found: ${code} — looking up…`;
+        await lookupBarcode(code);
+      });
+    } catch (e) {
+      scanStatus.textContent = '⚠ Camera error: ' + e.message;
+      scanning = false;
+    }
+  });
+
+  scanClose.addEventListener('click', stopScanner);
+  function stopScanner() {
+    if (codeReader) { codeReader.reset(); codeReader = null; }
+    scanning = false;
+    scanPanel.hidden = true;
+    document.getElementById('scanner-viewport').innerHTML = '';
+    scanStatus.textContent = 'Point camera at a barcode…';
+  }
+
+  async function lookupBarcode(code) {
+    try {
+      const res = await fetch('/pos/lookup?barcode=' + encodeURIComponent(code));
+      if (!res.ok) {
+        const err = await res.json();
+        scanStatus.textContent = '❌ ' + (err.error || 'Not found');
+        return;
+      }
+      const product = await res.json();
+      const btn     = productBtns.find(b => parseInt(b.dataset.id) === product.id);
+      const stock   = btn ? parseInt(btn.dataset.stock) : product.stock;
+      const added   = addToCart(product.id, product.name, product.price, stock);
+      scanStatus.textContent = added
+        ? `✅ Added: ${product.name}`
+        : `⚠ ${product.name}: out of stock`;
+    } catch (e) {
+      scanStatus.textContent = '❌ Error: ' + e.message;
+    }
+  }
+
+  // ── Toast utility ─────────────────────────────────────────────
+  function showToast(msg, type = 'info') {
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('toast-show'));
+    setTimeout(() => {
+      el.classList.remove('toast-show');
+      setTimeout(() => el.remove(), 300);
+    }, 3000);
+  }
+})();
+</script>
+
+<%- include('partials/foot') %>
