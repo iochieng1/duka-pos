@@ -1,0 +1,33 @@
+<%- include('partials/head', { title: t('my_shops') }) %>
+<%- include('partials/nav', { active: 'shops' }) %>
+
+<main class="container">
+  <div class="page-header"><h2><%= t('my_shops') %></h2></div>
+
+  <div class="shops-grid">
+    <% shops.forEach(shop => { %>
+      <% const isCurrent = shop.id === currentShop.id; %>
+      <div class="shop-card <%= isCurrent ? 'shop-card--active' : '' %>">
+        <div class="shop-card-icon">🏪</div>
+        <div class="shop-card-body">
+          <div class="shop-card-name"><%= shop.name %></div>
+          <% if (shop.address) { %><div class="shop-card-meta">📍 <%= shop.address %></div><% } %>
+          <% if (shop.phone)   { %><div class="shop-card-meta">📞 <%= shop.phone %></div><% } %>
+          <div class="shop-card-meta" style="margin-top:4px">Login: <code><%= shop.login_name %></code></div>
+        </div>
+        <div class="shop-card-action">
+          <% if (isCurrent) { %>
+            <span class="badge badge--ok"><%= t('current_shop') %></span>
+          <% } else { %>
+            <form method="POST" action="/shops/switch">
+              <input type="hidden" name="shop_id" value="<%= shop.id %>">
+              <button type="submit" class="btn btn-primary btn-sm"><%= t('switch_to') %></button>
+            </form>
+          <% } %>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+</main>
+
+<%- include('partials/foot') %>

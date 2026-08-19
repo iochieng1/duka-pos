@@ -1,0 +1,8 @@
+<%- include('partials/head', { title: '500 — Server Error' }) %>
+<div class="error-page">
+  <div class="error-code">500</div>
+  <div class="error-msg-text">Something went wrong</div>
+  <% if (message) { %><p class="error-detail"><%= message %></p><% } %>
+  <a href="/" class="btn btn-primary">← Back to Dashboard</a>
+</div>
+<%- include('partials/foot') %>
