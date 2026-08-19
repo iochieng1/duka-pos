@@ -1,0 +1,98 @@
+<%- include('partials/head', { title: t('dashboard') }) %>
+<%- include('partials/nav', { active: 'dashboard' }) %>
+
+<main class="container">
+  <div class="page-header">
+    <div>
+      <h2><%= t('dashboard') %></h2>
+      <p class="shop-label">🏪 <%= shop.name %></p>
+    </div>
+    <span class="date" id="today-date"></span>
+  </div>
+
+  <!-- Metric cards -->
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="metric-label"><%= t('revenue_today') %></div>
+      <div class="metric-value green">KSh <%= totalRevenue.toFixed(0) %></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label"><%= t('transactions') %></div>
+      <div class="metric-value"><%= totalSales %></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label"><%= t('products') %></div>
+      <div class="metric-value"><%= products.length %></div>
+    </div>
+    <div class="metric-card <%= lowStock.length > 0 ? 'metric-card--warn' : '' %>">
+      <div class="metric-label"><%= t('low_stock_items') %></div>
+      <div class="metric-value"><%= lowStock.length %></div>
+    </div>
+  </div>
+
+  <!-- Low stock banner -->
+  <% if (lowStock.length) { %>
+    <div class="alert alert-warn">
+      ⚠ <strong><%= t('low_stock_alert') %></strong>
+      <%= lowStock.map(p => `${p.name} (${p.stock} ${t('left')})`).join(' · ') %>
+      <% if (user.role === 'owner') { %>
+        <a href="/inventory" class="alert-link">Restock →</a>
+      <% } %>
+    </div>
+  <% } %>
+
+  <div class="dashboard-grid">
+    <!-- Sales log -->
+    <div class="card">
+      <div class="card-header">
+        <h3><%= t('sales_today') %></h3>
+        <a href="/pos" class="btn btn-primary btn-sm"><%= t('new_sale') %></a>
+      </div>
+      <% if (sales.length) { %>
+        <table class="table">
+          <thead>
+            <tr><th><%= t('time') %></th><th><%= t('cashier') %></th><th><%= t('total') %></th></tr>
+          </thead>
+          <tbody>
+            <% sales.forEach(s => { %>
+            <tr>
+              <td><%= new Date(s.created_at + 'Z').toLocaleTimeString('en-KE',{hour:'2-digit',minute:'2-digit'}) %></td>
+              <td><%= s.cashier_name %></td>
+              <td><strong>KSh <%= s.total_amount.toFixed(0) %></strong></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      <% } else { %>
+        <p class="empty-state"><%= t('no_sales_yet') %></p>
+      <% } %>
+    </div>
+
+    <!-- Top products (owner only) -->
+    <% if (user.role === 'owner' && topProducts.length) { %>
+    <div class="card">
+      <div class="card-header"><h3><%= t('top_products') %></h3></div>
+      <div class="top-products">
+        <% topProducts.forEach((p, i) => { %>
+        <div class="top-product-row">
+          <span class="tp-rank"><%= i + 1 %></span>
+          <span class="tp-name"><%= p.name %></span>
+          <span class="tp-stats"><%= p.total_qty %> <%= t('items') %> · KSh <%= Number(p.total_revenue).toFixed(0) %></span>
+          <div class="tp-bar">
+            <div class="tp-bar-fill" style="width:<%= Math.round((p.total_qty / topProducts[0].total_qty) * 100) %>%"></div>
+          </div>
+        </div>
+        <% }) %>
+      </div>
+    </div>
+    <% } %>
+  </div>
+</main>
+
+<script>
+  document.getElementById('today-date').textContent =
+    new Date().toLocaleDateString('<%= lang==="sw"?"sw-KE":"en-KE" %>',
+      { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+</script>
+
+<%- include('partials/foot') %>
