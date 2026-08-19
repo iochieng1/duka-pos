@@ -1,0 +1,115 @@
+<%- include('partials/head', { title: t('inventory') }) %>
+<%- include('partials/nav', { active: 'inventory' }) %>
+
+<main class="container">
+  <div class="page-header"><h2><%= t('inventory') %></h2></div>
+
+  <!-- Add product -->
+  <div class="card">
+    <div class="card-header"><h3><%= t('add_new_product') %></h3></div>
+    <form method="POST" action="/inventory/product" class="add-product-form">
+      <div class="form-row">
+        <div class="form-field">
+          <label class="form-label"><%= t('product_name') %></label>
+          <input type="text" name="name" placeholder="e.g. Sugar 1kg" required>
+        </div>
+        <div class="form-field form-field--sm">
+          <label class="form-label"><%= t('price_ksh') %></label>
+          <input type="number" name="price" placeholder="180" required min="1" step="0.01">
+        </div>
+        <div class="form-field form-field--sm">
+          <label class="form-label"><%= t('initial_stock') %></label>
+          <input type="number" name="stock" placeholder="0" min="0" value="0">
+        </div>
+        <div class="form-field form-field--sm">
+          <label class="form-label"><%= t('low_threshold') %></label>
+          <input type="number" name="low_stock_threshold" placeholder="5" min="1" value="5">
+        </div>
+        <div class="form-field">
+          <label class="form-label"><%= t('category') %></label>
+          <input type="text" name="category" placeholder="e.g. Dry Goods" list="cat-list" value="General">
+          <datalist id="cat-list">
+            <% categories.forEach(c => { %><option value="<%= c %>"><% }) %>
+          </datalist>
+        </div>
+        <div class="form-field">
+          <label class="form-label"><%= t('barcode_optional') %></label>
+          <input type="text" name="barcode" placeholder="6001070000013">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary"><%= t('add_product') %></button>
+    </form>
+  </div>
+
+  <!-- Stock table with category filter -->
+  <div class="card">
+    <div class="card-header">
+      <h3><%= t('stock_levels') %></h3>
+      <div class="category-tabs" style="margin:0">
+        <button class="cat-tab active" data-cat="all" onclick="filterCat('all',this)"><%= t('category_all') %></button>
+        <% categories.forEach(cat => { %>
+          <button class="cat-tab" data-cat="<%= cat %>" onclick="filterCat('<%= cat %>',this)"><%= cat %></button>
+        <% }) %>
+      </div>
+    </div>
+
+    <form method="POST" action="/inventory/restock" id="restock-form">
+      <table class="table" id="inv-table">
+        <thead>
+          <tr>
+            <th><%= t('product_name') %></th>
+            <th><%= t('category') %></th>
+            <th><%= t('price_ksh') %></th>
+            <th><%= t('in_stock') %></th>
+            <th><%= t('sold_today') %></th>
+            <th><%= t('barcode') %></th>
+            <th><%= t('status') %></th>
+            <th><%= t('add_stock') %></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% products.forEach(p => { %>
+            <% const status = p.stock === 0 ? 'out' : p.stock <= p.low_stock_threshold ? 'low' : 'ok'; %>
+            <tr data-category="<%= p.category %>">
+              <td><strong><%= p.name %></strong></td>
+              <td><span class="cat-pill"><%= p.category %></span></td>
+              <td>KSh <%= p.price.toFixed(0) %></td>
+              <td><%= p.stock %></td>
+              <td class="sold-count"><%= p.sold_today %></td>
+              <td class="barcode-cell"><%= p.barcode || '—' %></td>
+              <td><span class="badge badge--<%= status %>"><%= t(status) %></span></td>
+              <td>
+                <input type="number" name="qty_<%= p.id %>"
+                  placeholder="0" min="1" class="input-small" autocomplete="off">
+              </td>
+              <td>
+                <form method="POST" action="/inventory/product/<%= p.id %>/delete"
+                  onsubmit="return confirm('Delete <%= p.name.replace(/'/g, "\\'") %>?')"
+                  style="display:inline">
+                  <button type="submit" class="btn-icon-delete" title="<%= t('delete_confirm') %>">🗑</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <div style="margin-top:14px;display:flex;gap:10px;align-items:center">
+        <button type="submit" class="btn btn-primary"><%= t('apply_restock') %></button>
+        <span style="font-size:12px;color:var(--muted)">Enter quantities above then click Apply</span>
+      </div>
+    </form>
+  </div>
+</main>
+
+<script>
+  function filterCat(cat, el) {
+    document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.querySelectorAll('#inv-table tbody tr').forEach(row => {
+      row.style.display = (cat === 'all' || row.dataset.category === cat) ? '' : 'none';
+    });
+  }
+</script>
+
+<%- include('partials/foot') %>
