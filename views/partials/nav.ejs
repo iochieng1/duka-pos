@@ -1,0 +1,41 @@
+<nav class="navbar">
+  <a class="nav-brand" href="/">Duka<span>POS</span></a>
+
+  <div class="nav-links">
+    <a href="/"          class="<%= active==='dashboard' ?'active':'' %>"><%= t('dashboard') %></a>
+    <a href="/pos"       class="<%= active==='pos'       ?'active':'' %>"><%= t('checkout')  %></a>
+    <% if (user && user.role === 'owner') { %>
+    <a href="/inventory" class="<%= active==='inventory' ?'active':'' %>"><%= t('inventory') %></a>
+    <a href="/reports"   class="<%= active==='reports'   ?'active':'' %>"><%= t('reports')   %></a>
+    <a href="/shops"     class="<%= active==='shops'     ?'active':'' %>"><%= t('shops')     %></a>
+    <% } %>
+  </div>
+
+  <div class="nav-right">
+    <div class="lang-toggle">
+      <a href="/lang/en" class="<%= lang==='en'?'lang-active':'' %>">EN</a>
+      <span>|</span>
+      <a href="/lang/sw" class="<%= lang==='sw'?'lang-active':'' %>">SW</a>
+    </div>
+    <% if (user) { %>
+    <div class="nav-user">
+      <span class="nav-avatar"><%= user.name.charAt(0).toUpperCase() %></span>
+      <span class="nav-username"><%= user.name %></span>
+      <span class="nav-role-badge nav-role-badge--<%= user.role %>"><%= user.role %></span>
+      <form method="POST" action="/logout">
+        <button type="submit" class="btn-logout"><%= t('logout') %></button>
+      </form>
+    </div>
+    <% } %>
+  </div>
+</nav>
+
+<% if (flash.success && flash.success.length) { %>
+  <div class="flash flash-success"><%= flash.success[0] %></div>
+<% } %>
+<% if (flash.error && flash.error.length) { %>
+  <div class="flash flash-error"><%= flash.error[0] %></div>
+<% } %>
+<% if (flash.info && flash.info.length) { %>
+  <div class="flash flash-info"><%= flash.info[0] %></div>
+<% } %>
