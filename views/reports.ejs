@@ -1,0 +1,68 @@
+<%- include('partials/head', { title: t('reports') }) %>
+<%- include('partials/nav', { active: 'reports' }) %>
+
+<main class="container">
+  <div class="page-header">
+    <h2><%= t('sales_reports') %></h2>
+    <a href="/reports/export.csv" class="btn btn-outline">⬇ <%= t('export_csv') %></a>
+  </div>
+
+  <!-- Summary table -->
+  <div class="card">
+    <table class="table">
+      <thead>
+        <tr>
+          <th><%= t('date') %></th>
+          <th><%= t('transactions') %></th>
+          <th><%= t('items_sold') %></th>
+          <th><%= t('cashiers_active') %></th>
+          <th><%= t('total') %> (KSh)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (summaries.length) { %>
+          <% summaries.forEach(s => { %>
+          <tr>
+            <td><%= s.date %></td>
+            <td><%= s.total_sales %></td>
+            <td><%= s.items_sold %></td>
+            <td><%= s.cashiers_active %></td>
+            <td><strong>KSh <%= Number(s.total_revenue).toFixed(0) %></strong></td>
+          </tr>
+          <% }) %>
+          <!-- Totals row -->
+          <tr class="totals-row">
+            <td><strong>7-day total</strong></td>
+            <td><strong><%= summaries.reduce((s,r) => s + r.total_sales, 0) %></strong></td>
+            <td><strong><%= summaries.reduce((s,r) => s + r.items_sold, 0) %></strong></td>
+            <td>—</td>
+            <td><strong>KSh <%= summaries.reduce((s,r) => s + Number(r.total_revenue), 0).toFixed(0) %></strong></td>
+          </tr>
+        <% } else { %>
+          <tr><td colspan="5" class="empty-state"><%= t('no_sales_data') %></td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Top products -->
+  <% if (topProducts.length) { %>
+  <div class="card">
+    <div class="card-header"><h3><%= t('top_products') %></h3></div>
+    <div class="top-products">
+      <% topProducts.forEach((p, i) => { %>
+      <div class="top-product-row">
+        <span class="tp-rank"><%= i + 1 %></span>
+        <span class="tp-name"><%= p.name %></span>
+        <span class="tp-stats"><%= p.total_qty %> <%= t('items') %> · KSh <%= Number(p.total_revenue).toFixed(0) %></span>
+        <div class="tp-bar">
+          <div class="tp-bar-fill" style="width:<%= Math.round((p.total_qty/topProducts[0].total_qty)*100) %>%"></div>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+  </div>
+  <% } %>
+</main>
+
+<%- include('partials/foot') %>
