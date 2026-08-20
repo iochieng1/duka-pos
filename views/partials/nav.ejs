@@ -23,6 +23,7 @@
       <span class="nav-username"><%= user.name %></span>
       <span class="nav-role-badge nav-role-badge--<%= user.role %>"><%= user.role %></span>
       <form method="POST" action="/logout">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <button type="submit" class="btn-logout"><%= t('logout') %></button>
       </form>
     </div>

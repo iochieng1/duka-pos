@@ -58,6 +58,7 @@
 
     <!-- Real form — POSTs to /login, no JS interception -->
     <form method="POST" action="/login" id="login-form" novalidate>
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <input type="hidden" name="role" id="role-input" value="<%= prefillRole %>">
 
       <div class="form-group">

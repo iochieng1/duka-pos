@@ -20,6 +20,7 @@
             <span class="badge badge--ok"><%= t('current_shop') %></span>
           <% } else { %>
             <form method="POST" action="/shops/switch">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <input type="hidden" name="shop_id" value="<%= shop.id %>">
               <button type="submit" class="btn btn-primary btn-sm"><%= t('switch_to') %></button>
             </form>

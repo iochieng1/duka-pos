@@ -8,6 +8,7 @@
   <div class="card">
     <div class="card-header"><h3><%= t('add_new_product') %></h3></div>
     <form method="POST" action="/inventory/product" class="add-product-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="form-row">
         <div class="form-field">
           <label class="form-label"><%= t('product_name') %></label>
@@ -54,6 +55,7 @@
     </div>
 
     <form method="POST" action="/inventory/restock" id="restock-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <table class="table" id="inv-table">
         <thead>
           <tr>
@@ -85,8 +87,9 @@
               </td>
               <td>
                 <form method="POST" action="/inventory/product/<%= p.id %>/delete"
-                  onsubmit="return confirm('Delete <%= p.name.replace(/'/g, "\\'") %>?')"
-                  style="display:inline">
+                  class="delete-form" style="display:inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="product_name" value="<%= p.name %>">
                   <button type="submit" class="btn-icon-delete" title="<%= t('delete_confirm') %>">🗑</button>
                 </form>
               </td>
@@ -110,6 +113,16 @@
       row.style.display = (cat === 'all' || row.dataset.category === cat) ? '' : 'none';
     });
   }
+
+  // Safely handle delete form confirmation
+  document.querySelectorAll('.delete-form').forEach(form => {
+    form.addEventListener('submit', (e) => {
+      const name = form.querySelector('[name="product_name"]').value;
+      if (!confirm(`Delete "${name}"?`)) {
+        e.preventDefault();
+      }
+    });
+  });
 </script>
 
 <%- include('partials/foot') %>

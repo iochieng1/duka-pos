@@ -306,10 +306,46 @@ const TR = {
     document.getElementById('print-receipt').style.display = 'none';
   });
 
-  document.getElementById('btn-new-sale').addEventListener('click', () => {
+  document.getElementById('btn-new-sale').addEventListener('click', async () => {
     receiptModal.hidden = true;
     checkoutBtn.textContent = TR.checkoutLabel;
-    window.location.reload();
+    
+    // Refresh product grid and cart instead of full reload
+    try {
+      const res = await fetch('/pos');
+      if (!res.ok) {
+        window.location.reload();
+        return;
+      }
+      
+      const html = await res.text();
+      const newDoc = new DOMParser().parseFromString(html, 'text/html');
+      
+      // Update product buttons with fresh stock data
+      newDoc.querySelectorAll('.product-btn').forEach((newBtn, i) => {
+        const oldBtn = productBtns[i];
+        if (oldBtn && newBtn) {
+          const newStock = parseInt(newBtn.dataset.stock);
+          const oldStock = parseInt(oldBtn.dataset.stock);
+          if (newStock !== oldStock) {
+            oldBtn.dataset.stock = newStock;
+            const status = newStock === 0 ? 'out' : newStock <= parseInt(newBtn.dataset.threshold || 5) ? 'low' : 'ok';
+            oldBtn.classList.toggle('product-btn--low', status === 'low');
+            oldBtn.disabled = status === 'out';
+            const stockText = status === 'out' ? TR.outOfStock : `${newStock} ${t('left')}`;
+            const stockEl = oldBtn.querySelector('.product-stock');
+            if (stockEl) stockEl.textContent = stockText;
+          }
+        }
+      });
+      
+      cart = [];
+      renderCart();
+      showToast('✅ Ready for next sale', 'info');
+    } catch (e) {
+      console.error('Stock refresh error:', e);
+      window.location.reload();
+    }
   });
 
   // ── Barcode scanner (ZXing) ───────────────────────────────────
@@ -317,7 +353,7 @@ const TR = {
   const scanClose   = document.getElementById('scan-close');
   const scanPanel   = document.getElementById('scanner-panel');
   const scanStatus  = document.getElementById('scanner-status');
-  let codeReader = null, scanning = false;
+  let codeReader = null, scanning = false, scanTimeout;
 
   scanBtn.addEventListener('click', async () => {
     scanPanel.hidden = false;
@@ -339,14 +375,29 @@ const TR = {
         scanStatus.textContent = `Found: ${code} — looking up…`;
         await lookupBarcode(code);
       });
+      
+      // Auto-close scanner after 2 minutes of inactivity
+      scanTimeout = setTimeout(() => {
+        stopScanner();
+        showToast('Scanner closed (timeout)', 'info');
+      }, 2 * 60 * 1000);
     } catch (e) {
-      scanStatus.textContent = '⚠ Camera error: ' + e.message;
       scanning = false;
+      if (e.name === 'NotAllowedError') {
+        scanStatus.textContent = '📷 Camera access denied. Allow in browser settings.';
+      } else if (e.name === 'NotFoundError') {
+        scanStatus.textContent = '❌ No camera found.';
+      } else if (e.name === 'NotSupportedError') {
+        scanStatus.textContent = '❌ Barcode scanner not supported in your browser.';
+      } else {
+        scanStatus.textContent = '⚠ Camera error: ' + e.message;
+      }
     }
   });
 
   scanClose.addEventListener('click', stopScanner);
   function stopScanner() {
+    clearTimeout(scanTimeout);
     if (codeReader) { codeReader.reset(); codeReader = null; }
     scanning = false;
     scanPanel.hidden = true;

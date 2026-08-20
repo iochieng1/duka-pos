@@ -5,6 +5,7 @@ require("dotenv").config();
 
 const express  = require("express");
 const session  = require("express-session");
+const csrf     = require("csurf");
 const morgan   = require("morgan");
 const flash    = require("connect-flash");
 const path     = require("path");
@@ -45,6 +46,43 @@ app.use(flash());
 app.use(attachUser);
 app.use(i18n);
 
+// ── CSRF Protection ────────────────────────────────────────────────────────
+const csrfProtection = csrf({ cookie: false });
+app.use(csrfProtection);
+
+// ── Rate limiting for login (prevent brute force) ──────────────────────────
+const loginAttempts = {}; // { "user:ip": { count, lastAttempt } }
+const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
+const MAX_ATTEMPTS = 5;
+
+function checkRateLimit(key) {
+  const attempt = loginAttempts[key] || { count: 0, lastAttempt: 0 };
+  if (Date.now() - attempt.lastAttempt > RATE_LIMIT_WINDOW) {
+    attempt.count = 0;
+  }
+  return attempt.count < MAX_ATTEMPTS;
+}
+
+function recordAttempt(key) {
+  const attempt = loginAttempts[key] || { count: 0, lastAttempt: 0 };
+  if (Date.now() - attempt.lastAttempt > RATE_LIMIT_WINDOW) {
+    attempt.count = 0;
+  }
+  attempt.count++;
+  attempt.lastAttempt = Date.now();
+  loginAttempts[key] = attempt;
+}
+
+function clearAttempt(key) {
+  delete loginAttempts[key];
+}
+
+// Expose CSRF token to every template
+app.use((req, res, next) => {
+  res.locals.csrfToken = req.csrfToken();
+  next();
+});
+
 // Expose flash messages to every template
 app.use((req, res, next) => {
   res.locals.flash = {
@@ -67,30 +105,52 @@ app.get("/lang/:code", (req, res) => {
 
 app.get("/login", (req, res) => {
   if (req.session.user) return res.redirect("/");
-  res.render("login", { title: "Sign In", error: null, prefillName: "", prefillRole: "owner" });
+  res.render("login", { title: "Sign In", error: null, prefillName: "", prefillRole: "owner", csrfToken: req.csrfToken() });
 });
 
 app.post("/login", (req, res) => {
   const { name = "", pin = "", role = "owner" } = req.body;
+  const attemptKey = `${name}:${req.ip}`;
 
   if (!name.trim() || !pin.trim()) {
     return res.render("login", {
       title: "Sign In",
       error: "Please enter both name and PIN.",
-      prefillName: name, prefillRole: role,
+      prefillName: name, prefillRole: role, csrfToken: req.csrfToken(),
+    });
+  }
+
+  // Enforce minimum PIN length
+  if (pin.length < 4) {
+    return res.render("login", {
+      title: "Sign In",
+      error: "PIN must be at least 4 digits.",
+      prefillName: name, prefillRole: role, csrfToken: req.csrfToken(),
+    });
+  }
+
+  // Check rate limit
+  if (!checkRateLimit(attemptKey)) {
+    return res.status(429).render("login", {
+      title: "Sign In",
+      error: "Too many login attempts. Please try again in 15 minutes.",
+      prefillName: name, prefillRole: role, csrfToken: req.csrfToken(),
     });
   }
 
   const user = q.getUserByName.get(name.trim());
 
   if (!user || !bcrypt.compareSync(pin, user.pin_hash)) {
+    recordAttempt(attemptKey);
     return res.render("login", {
       title: "Sign In",
       error: "Invalid name or PIN — please try again.",
-      prefillName: name, prefillRole: role,
+      prefillName: name, prefillRole: role, csrfToken: req.csrfToken(),
     });
   }
 
+  // Successful login
+  clearAttempt(attemptKey);
   const shop = q.getShopById.get(user.shop_id);
   req.session.user = { id: user.id, name: user.name, role: user.role, shopId: user.shop_id, shopName: shop.name };
 
